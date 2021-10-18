@@ -13,11 +13,16 @@ import os,time
 import requests
 import hashlib
 import base64
+from PIL import Image
 
-proxies = {
-    "http": "http://user:password@10.185.113.100:8002",
-    "https": "http://user:password@10.185.113.100:8002",
-}
+# 公司代理
+# proxies = {
+#     "http": "http://user:password@10.185.113.100:8002",
+#     "https": "http://user:password@10.185.113.100:8002",
+# }
+
+# 自己电脑
+proxies = {}
 def get_html(url):
     '''获取海尚购获奖名单网页'''
     headers = {
@@ -51,10 +56,11 @@ def download_pic(urls,path):
         content = get_html(url)
         if content:
             name = path + hashlib.md5(url.encode(encoding='utf-8')).hexdigest() + suffix
-            print(f'文件名是{name}')
+            # print(f'文件名是{name}')
             write_file_to_disk(content,name)
             count += 1
-        time.sleep(3)
+        # 2秒下载一次
+        time.sleep(2)
     print(f'成功下载{count}个文件')
     return count
     
@@ -78,23 +84,35 @@ def get_token():
         return response.json()['access_token']
 
 def parse_pic(folder):
-    '''调用百度文字识别接口识别图片文字'''
-    request_url = "https://aip.baidubce.com/rest/2.0/ocr/v1/accurate_basic"
-    # 二进制方式打开图片文件
+    '''解析所有图片'''
+    # 遍历所有图片
     file_list = os.listdir(folder)
     if file_list:
+        # 获取token
+        access_token = get_token()
         for file in file_list:
             filename = folder + file
-            print(filename)
-            # with open(filename,'rb') as f:
-            #     img = base64.b64encode(f.read())
-            # params = {"image":img}
-            # access_token = get_token()
-            # request_url = request_url + "?access_token=" + access_token
-            # headers = {'content-type': 'application/x-www-form-urlencoded'}
-            # response = requests.post(request_url, data=params, headers=headers)
-            # if response and response.status_code == 200:
-                #print (response.json())
+            result = baidu_api(filename,access_token)
+            print(f'{file}图片解析结果{result}')
+
+def baidu_api(file,access_token):
+    '''调用百度文字接口识别图片文字'''
+    request_url = "https://aip.baidubce.com/rest/2.0/ocr/v1/form"
+    with open(file,'rb') as f:
+        img = base64.b64encode(f.read())
+    params = {"url": img}
+    request_url = request_url + "?access_token=" + access_token
+    headers = {'content-type': 'application/x-www-form-urlencoded'}
+    response = requests.post(request_url, data=params, headers=headers)
+    if response and response.status_code == 200:
+        print(response.json())
+        return response.json()
+
+
+def split_pic(url):
+    '''切割图片'''
+    img = Image.open(url)
+    print(img.size)
 
 def main(folder):
     '''获取完整获奖名单清单'''
@@ -107,10 +125,39 @@ def main(folder):
         count = download_pic(pic_urls,folder)
         if count > 0:
             parse_pic(folder)
-        
+
+'''
+Pillow 测试代码
+from PIL import Image, ImageEnhance
+image = Image.open('1.jpg')
+w,h = image.size
+#box对背景图进行上下分割。
+box1 = (0,0,w,int(h/2))
+box2 = (0,int(h/2),w,h)
+#im1是上半部分
+#im2是下半部分
+im1 = image.crop(box1)
+im2 = image.crop(box2)
+#新建画布
+flag = Image.new('RGB',(w,h))
+#对图片上半部分进行明暗处理，对下半部分进行对比度处理
+im1 = ImageEnhance.Brightness(im1).enhance(0.5)
+im2 = ImageEnhance.Contrast(im2).enhance(2.0)
+flag.paste(im1, (0,0))
+flag.paste(im2, (0,int(h/2)))
+flag.save('result.jpg',quality=100)
+flag.show()
+'''
+
 
 
 if __name__ == '__main__':
-    folder = 'E:\\Python\\liaoxuefeng\\pachong\\haishang\\third\\'
-    #main()
-    print(get_token())
+    #folder = 'E:\\Python\\liaoxuefeng\\pachong\\haishang\\third\\'
+    root_folder = 'G:\\GitWorkSpace\\python_practice\\crawler\\'
+    folder = 'haishang\\third\\'
+    #main(root_folder + folder)
+    #print(get_token())
+    # access_token = get_token()
+    # print(f'token：{access_token}')
+    # baidu_api('G:\\GitWorkSpace\\python_practice\\crawler\\haishang\\third\\2a4916e3c7f6851413edb3cacbab992a.png',access_token)
+    split_pic('G:\\GitWorkSpace\\python_practice\\crawler\\haishang\\third\\2a4916e3c7f6851413edb3cacbab992a.png')
